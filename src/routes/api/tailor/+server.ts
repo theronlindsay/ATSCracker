@@ -76,6 +76,7 @@ Master Resume Data:
 		// Save to Database
 		const newTailored = await TailoredResume.create({
 			jobDescription,
+			companyName: `Draft - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
 			data: tailoredJson,
 			theme: 'macchiato'
 		});

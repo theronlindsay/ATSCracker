@@ -17,6 +17,10 @@
 	let coverLetterPrompt = $state('');
 	
 	let generationMode = $state<'resume' | 'coverletter'>('resume');
+	
+	let editorMode = $state<'master' | 'draft'>('master');
+	let draftsList = $state<any[]>([]);
+	let selectedDraftId = $state('');
 
 	// Accordion state
 	let openPanels = $state<Record<string, boolean>>({
@@ -77,7 +81,22 @@
 				editorContent = JSON.stringify(masterData[activeSection], null, 2);
 			}
 		} catch(e) { console.error('Failed to load master data', e); }
+
+		// Load Drafts
+		await fetchDrafts();
 	});
+
+	async function fetchDrafts() {
+		try {
+			const res = await fetch('/api/drafts');
+			if (res.ok) {
+				const json = await res.json();
+				draftsList = json.drafts;
+			}
+		} catch (e) {
+			console.error('Failed to fetch drafts', e);
+		}
+	}
 
 	// Save Settings Debounce
 	let saveSettingsTimeout: ReturnType<typeof setTimeout>;
@@ -108,10 +127,26 @@
 	// Select a section to edit
 	function selectSection(sec: string) {
 		activeSection = sec;
+		editorMode = 'master'; // switch back to master mode
 		if (!masterData[sec]) {
 			masterData[sec] = {};
 		}
 		editorContent = JSON.stringify(masterData[sec], null, 2);
+	}
+
+	async function handleDraftSelect() {
+		if (!selectedDraftId) return;
+		try {
+			const res = await fetch(`/api/drafts/${selectedDraftId}`);
+			if (res.ok) {
+				const json = await res.json();
+				editorMode = 'draft';
+				editorContent = JSON.stringify(json.draft.data, null, 2);
+				await renderPreview(json.draft.data, selectedTheme);
+			}
+		} catch (e) {
+			console.error('Failed to load draft', e);
+		}
 	}
 
 	// Auto-save logic
@@ -124,16 +159,27 @@
 		saveTimeout = setTimeout(async () => {
 			try {
 				const parsed = JSON.parse(editorContent);
-				masterData[activeSection] = parsed;
-				
 				isSaving = true;
-				await fetch('/api/masterdata', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ section: activeSection, data: parsed })
-				});
+
+				if (editorMode === 'master') {
+					masterData[activeSection] = parsed;
+					await fetch('/api/masterdata', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ section: activeSection, data: parsed })
+					});
+					showToast(`Saved ${activeSection}`);
+				} else if (editorMode === 'draft' && selectedDraftId) {
+					await fetch(`/api/drafts/${selectedDraftId}`, {
+						method: 'PUT',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ data: parsed })
+					});
+					await renderPreview(parsed, selectedTheme);
+					showToast('Saved Draft');
+				}
+				
 				isSaving = false;
-				showToast(`Saved ${activeSection}`);
 			} catch (err) {
 				// Invalid JSON, don't save yet
 			}
@@ -201,6 +247,10 @@
 				const result = await res.json();
 				await renderPreview(result.resume, selectedTheme);
 				showToast('Resume tailored successfully!');
+				await fetchDrafts();
+				selectedDraftId = result.id;
+				editorMode = 'draft';
+				editorContent = JSON.stringify(result.resume, null, 2);
 			} else {
 				const err = await res.json();
 				alert(err.error);
@@ -457,7 +507,13 @@
 			<div class="editor-header">
 			<div class="editor-title">
 				<FileText size={20} class="accent-icon" />
-				<h2>Editing: {activeSection}.json</h2>
+				<h2>
+					{#if editorMode === 'master'}
+						Editing: {activeSection}.json
+					{:else}
+						Editing: Tailored Draft
+					{/if}
+				</h2>
 			</div>
 			<div class="save-status">
 				{#if isSaving}
@@ -497,6 +553,13 @@
 
 			<div class="toolbar-group">
 				{#if generationMode === 'resume'}
+					<select bind:value={selectedDraftId} onchange={handleDraftSelect} class="ui-select sm-select">
+						<option value="">-- Select a Draft --</option>
+						{#each draftsList as draft}
+							<option value={draft._id}>{draft.companyName}</option>
+						{/each}
+					</select>
+
 					<select bind:value={selectedTheme} class="ui-select sm-select">
 						{#each THEMES as theme}
 							<option value={theme}>{theme} theme</option>
@@ -546,6 +609,21 @@
 								/* Inject font override */
 								body { font-family: '${selectedFont}', sans-serif !important; }
 								
+								${selectedTheme === 'macchiato' ? `
+								/* Expand left sidebar in macchiato theme */
+								.left-column { width: 220px !important; margin-right: 25px !important; }
+								.info-tag-container .info-text { width: auto !important; }
+								/* Prevent bullet points from splitting across columns */
+								ul.two-column li { break-inside: avoid-column; page-break-inside: avoid; }
+								
+								/* Format education in left column */
+								.left-column .education-container { text-align: left; }
+								.left-column .education-container .pull-left, .left-column .education-container .pull-right { float: none !important; display: block; text-align: left; }
+								.left-column .education-container h5.italic.pull-right { margin-top: 3px; margin-bottom: 6px; color: #777; }
+								.left-column .education-container ul.two-column { column-count: 1 !important; -webkit-column-count: 1 !important; padding-left: 15px; margin-top: 10px; list-style-type: disc; }
+								.left-column .education-container ul.two-column li { text-align: left; }
+								` : ''}
+								
 								/* Inject visual page breaks for screen preview (US Letter: 8.5x11 in) */
 								@media screen {
 									html, body { 
@@ -568,8 +646,27 @@
 										z-index: 9999;
 									}
 								}
+								@media print {
+									@page {
+										margin: 0;
+									}
+									body {
+										-webkit-print-color-adjust: exact;
+										print-color-adjust: exact;
+									}
+								}
 							</style>
 							${previewHtml}
+							${selectedTheme === 'macchiato' ? `
+							<script>
+								// Move education to left sidebar
+								const ed = document.querySelector('.education-container');
+								const leftCol = document.querySelector('.left-column');
+								if (ed && leftCol) {
+									leftCol.appendChild(ed);
+								}
+							</script>
+							` : ''}
 						`}
 						frameborder="0"
 					></iframe>

@@ -1,0 +1,13 @@
+diff --git a/node_modules/jsonresume-theme-macchiato/src/partials/work.hbs b/node_modules/jsonresume-theme-macchiato/src/partials/work.hbs
+index 5824f5f..72cea53 100644
+--- a/node_modules/jsonresume-theme-macchiato/src/partials/work.hbs
++++ b/node_modules/jsonresume-theme-macchiato/src/partials/work.hbs
+@@ -4,7 +4,7 @@
+ 
+     {{#each resume.work}}
+         <section class="item">
+-            {{> section-header name=this.company }}
++            {{> section-header name=this.company website=this.url showWebsite=true}}
+ 
+             {{#if position}}
+             <h4>{{position}}</h4>

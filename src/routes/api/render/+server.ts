@@ -71,20 +71,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Render the resume
 		let html = themeModule.render(renderResume);
 
-		// HOTFIX: The macchiato theme's work.hbs template completely omits the website variable.
-		// We manually inject the anchor tags into the rendered HTML.
-		if (theme === 'macchiato' && Array.isArray(renderResume.work)) {
-			renderResume.work.forEach((job: any) => {
-				if (job.website && job.company) {
-					// Escape company name for regex
-					const escapedCompany = job.company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-					// The macchiato theme renders names as: <h3 class="bold pull-left">\n  Company Name\n</h3>
-					const regex = new RegExp(`(<h3 class="bold pull-left">\\s*)${escapedCompany}(\\s*</h3>)`, 'g');
-					html = html.replace(regex, `$1<a href="${job.website}" target="_blank" style="color: inherit; text-decoration: underline;">${job.company}</a>$2`);
-				}
-			});
-		}
-
 		// Decode custom strings back into the HTML
 		for (const [id, word] of invalidMap.entries()) {
 			const year = 1000 + id;

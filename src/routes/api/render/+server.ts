@@ -60,6 +60,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (Array.isArray(renderResume.work)) {
 			renderResume.work.forEach((w: any) => {
 				if (w.url && !w.website) w.website = w.url;
+				if (w.name && !w.company) w.company = w.name;
 			});
 		}
 		if (Array.isArray(renderResume.projects)) {

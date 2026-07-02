@@ -53,6 +53,21 @@ export const POST: RequestHandler = async ({ request }) => {
 		const renderResume = JSON.parse(JSON.stringify(resume));
 		encodeInvalidDates(renderResume);
 
+		// Compatibility for older themes (like macchiato) that expect 'website' instead of 'url'
+		if (renderResume.basics && renderResume.basics.url && !renderResume.basics.website) {
+			renderResume.basics.website = renderResume.basics.url;
+		}
+		if (Array.isArray(renderResume.work)) {
+			renderResume.work.forEach((w: any) => {
+				if (w.url && !w.website) w.website = w.url;
+			});
+		}
+		if (Array.isArray(renderResume.projects)) {
+			renderResume.projects.forEach((p: any) => {
+				if (p.url && !p.website) p.website = p.url;
+			});
+		}
+
 		// Render the resume
 		let html = themeModule.render(renderResume);
 

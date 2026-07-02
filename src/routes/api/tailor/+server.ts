@@ -42,7 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const defaultPrompt = `
 You are an expert resume tailor. Your task is to take my master resume data and rewrite/reorganize it to perfectly match the target job description. 
 Only output valid JSON matching the standard JSON Resume Schema (https://jsonresume.org/schema/). 
-Do not include markdown blocks, just raw JSON.
+Do not include markdown blocks, just raw JSON. Ensure that you preserve or include a 'url' field for work experience entries if applicable links exist.
 
 Target Job Description:
 {{jobDescription}}

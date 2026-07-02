@@ -44,7 +44,7 @@ You are an expert data extractor. Your task is to take the following raw resume 
 Raw Resume Text:
 {{resumeText}}
 
-Output ONLY valid JSON. Do not include markdown blocks like \`\`\`json, just the raw JSON object. Ensure all applicable fields (basics, work, education, skills, projects, etc.) are extracted as accurately as possible.
+Output ONLY valid JSON. Do not include markdown blocks like \`\`\`json, just the raw JSON object. Ensure all applicable fields (basics, work, education, skills, projects, etc.) are extracted as accurately as possible. For work experience entries, explicitly include a 'url' field for any relevant company or project links.
 `;
 		
 		let promptTemplate = customPrompt || defaultPrompt;

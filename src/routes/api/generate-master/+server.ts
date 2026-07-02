@@ -46,30 +46,51 @@ Raw Resume Text:
 
 Output ONLY valid JSON. Do not include markdown blocks like \`\`\`json, just the raw JSON object. Ensure all applicable fields (basics, work, education, skills, projects, etc.) are extracted as accurately as possible. For work experience entries, explicitly include a 'url' field for any relevant company or project links.
 `;
-		
+
 		let promptTemplate = customPrompt || defaultPrompt;
 		const finalPrompt = promptTemplate.replace('{{resumeText}}', resumeText);
 
 		const { text } = await generateText({
 			model: aiModel,
 			prompt: finalPrompt,
-			system: "You are a specialized JSON generator. You must ONLY output valid JSON. Do not include any explanations, greetings, or markdown formatting. Your output will be parsed directly by JSON.parse()."
+			system:
+				'You are a specialized JSON generator. You must ONLY output valid JSON. Do not include any explanations, greetings, or markdown formatting. Your output will be parsed directly by JSON.parse().'
 		});
 
 		let parsedResume;
 		try {
-			const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+			const cleanedText = text
+				.replace(/```json/g, '')
+				.replace(/```/g, '')
+				.trim();
 			parsedResume = JSON.parse(cleanedText);
 		} catch (parseError) {
-			console.error("AI returned invalid JSON:", text);
+			console.error('AI returned invalid JSON:', text);
 			return json({ error: 'AI failed to generate valid JSON' }, { status: 500 });
 		}
 
-		// Save each top-level key to MasterData
+		// Save each top-level key to MasterData (merging intelligently)
 		for (const [section, data] of Object.entries(parsedResume)) {
+			const existing = await MasterData.findOne({ section });
+			let mergedData = data;
+
+			if (existing && existing.data) {
+				if (Array.isArray(existing.data) && Array.isArray(data)) {
+					// Merge arrays: append new items to the existing array
+					mergedData = [...existing.data, ...data];
+				} else if (
+					typeof existing.data === 'object' &&
+					typeof data === 'object' &&
+					!Array.isArray(data)
+				) {
+					// Shallow merge objects
+					mergedData = { ...existing.data, ...data };
+				}
+			}
+
 			await MasterData.findOneAndUpdate(
 				{ section },
-				{ data },
+				{ data: mergedData },
 				{ upsert: true, new: true }
 			);
 		}

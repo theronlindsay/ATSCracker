@@ -59,17 +59,21 @@ Master Resume Data:
 		const { text } = await generateText({
 			model: aiModel,
 			prompt: finalPrompt,
-			system: "You are a specialized JSON generator. You must ONLY output valid JSON. Do not include any explanations, greetings, or markdown formatting like ```json. Your output will be parsed directly by JSON.parse()."
+			system:
+				'You are a specialized JSON generator. You must ONLY output valid JSON. Do not include any explanations, greetings, or markdown formatting like ```json. Your output will be parsed directly by JSON.parse().'
 		});
 
 		// Parse the output to ensure it's valid JSON
 		let tailoredJson;
 		try {
 			// Clean up potential markdown formatting if the model disobeys
-			const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+			const cleanedText = text
+				.replace(/```json/g, '')
+				.replace(/```/g, '')
+				.trim();
 			tailoredJson = JSON.parse(cleanedText);
 		} catch (parseError) {
-			console.error("AI returned invalid JSON:", text);
+			console.error('AI returned invalid JSON:', text);
 			return json({ error: 'AI failed to generate valid JSON' }, { status: 500 });
 		}
 

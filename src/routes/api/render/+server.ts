@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Many themes use moment.js which breaks on custom strings like "Present" or "Expected 2025".
-		// We replace them with a valid dummy date (1000-01-01 + id) so the theme renders it without error, 
+		// We replace them with a valid dummy date (1000-01-01 + id) so the theme renders it without error,
 		// and then replace the rendered dummy date with the original string in the output HTML.
 		let invalidId = 0;
 		const invalidMap = new Map<number, string>();
@@ -48,7 +48,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				}
 			}
 		};
-		
+
 		// Deep clone to avoid mutating the original object
 		const renderResume = JSON.parse(JSON.stringify(resume));
 		encodeInvalidDates(renderResume);
@@ -76,7 +76,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		for (const [id, word] of invalidMap.entries()) {
 			const year = 1000 + id;
 			// Matches formatted dates like "Jan 1000", "01/1000", "1000", "January, 1000"
-			const regex = new RegExp(`\\b(?:(?:Jan(?:uary)?|0?1)[\\s\\-\\/,]+)*${year}(?:[\\s\\-\\/,]+(?:Jan(?:uary)?|0?1))*\\b`, 'gi');
+			const regex = new RegExp(
+				`\\b(?:(?:Jan(?:uary)?|0?1)[\\s\\-\\/,]+)*${year}(?:[\\s\\-\\/,]+(?:Jan(?:uary)?|0?1))*\\b`,
+				'gi'
+			);
 			html = html.replace(regex, word);
 		}
 

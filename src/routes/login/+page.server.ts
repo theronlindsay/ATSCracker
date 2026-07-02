@@ -6,7 +6,7 @@ export const actions = {
 	default: async ({ request, cookies }) => {
 		const data = await request.formData();
 		const rawPassword = data.get('password');
-		
+
 		// Sanitize input: convert to string, trim, and limit length to prevent DoS attacks
 		const password = typeof rawPassword === 'string' ? rawPassword.trim().slice(0, 100) : '';
 

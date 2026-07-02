@@ -6,7 +6,7 @@
 	let error = $state('');
 
 	let { form } = $props();
-	
+
 	$effect(() => {
 		if (form?.incorrect) {
 			error = 'Incorrect password.';
@@ -83,12 +83,14 @@
 		border-radius: calc(var(--radius) * 1.5);
 		width: 100%;
 		max-width: 440px;
-		box-shadow: var(--shadow-glow), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+		box-shadow:
+			var(--shadow-glow),
+			0 25px 50px -12px rgba(0, 0, 0, 0.5);
 		border: 1px solid var(--border-color);
 		position: relative;
 		overflow: hidden;
 	}
-	
+
 	.login-card::before {
 		content: '';
 		position: absolute;
@@ -147,7 +149,7 @@
 		border-color: var(--accent-solid);
 		box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 	}
-	
+
 	.input-group input:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
@@ -185,12 +187,12 @@
 	button:active:not(:disabled) {
 		transform: translateY(0);
 	}
-	
+
 	button:disabled {
 		opacity: 0.8;
 		cursor: wait;
 	}
-	
+
 	button.loading {
 		background: var(--bg-secondary);
 		border: 1px solid var(--border-color);
@@ -203,7 +205,11 @@
 	}
 
 	@keyframes spin {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 </style>

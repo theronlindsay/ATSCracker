@@ -5,12 +5,12 @@ import { Settings } from '$lib/server/models/Settings';
 export const GET: RequestHandler = async () => {
 	try {
 		let settings = await Settings.findOne({ singleton: 'default' });
-		
+
 		if (!settings) {
 			// Create default if it doesn't exist
 			settings = await Settings.create({ singleton: 'default' });
 		}
-		
+
 		return json({ data: settings });
 	} catch (error: any) {
 		return json({ error: error.message }, { status: 500 });

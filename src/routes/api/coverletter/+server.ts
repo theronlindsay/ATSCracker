@@ -56,7 +56,8 @@ Master Resume Data:
 		const { text } = await generateText({
 			model: aiModel,
 			prompt: finalPrompt,
-			system: "You are a professional writer. You must ONLY output clean HTML representing a cover letter. Do not include markdown code blocks (like ```html), do not include <html> or <body> tags. Just standard structural tags like <p>, <br>, <strong>."
+			system:
+				'You are a professional writer. You must ONLY output clean HTML representing a cover letter. Do not include markdown code blocks (like ```html), do not include <html> or <body> tags. Just standard structural tags like <p>, <br>, <strong>.'
 		});
 
 		let html = text.trim();

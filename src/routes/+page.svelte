@@ -6,7 +6,10 @@
 	let masterData = $state<Record<string, any>>({});
 	let activeSection = $state('basics');
 	let editorContent = $state('');
-	
+
+	let leftColWidth = $state(320);
+	let midColWidth = $state(400);
+
 	let rawResumeText = $state('');
 	let isGeneratingMaster = $state(false);
 
@@ -15,9 +18,9 @@
 	let tailorPrompt = $state('');
 	let masterPrompt = $state('');
 	let coverLetterPrompt = $state('');
-	
+
 	let generationMode = $state<'resume' | 'coverletter'>('resume');
-	
+
 	let editorMode = $state<'master' | 'draft'>('master');
 	let draftsList = $state<any[]>([]);
 	let selectedDraftId = $state('');
@@ -31,26 +34,93 @@
 		vault: true
 	});
 
-	let leftColWidth = $state(320);
-	let midColWidth = $state(400);
-
 	let jobDescription = $state('');
 	let selectedTheme = $state('macchiato');
 	let selectedFont = $state('Outfit');
-	
+
 	let previewHtml = $state('');
+
+	let iframeSrcdoc = $derived(`
+		\x3Cstyle\x3E
+			/* Inject font override */
+			body { font-family: '${selectedFont}', sans-serif !important; }
+			
+			${
+				selectedTheme === 'macchiato'
+					? `
+			/* Expand left sidebar in macchiato theme */
+			.left-column { width: 220px !important; margin-right: 25px !important; }
+			.info-tag-container .info-text { width: auto !important; }
+			/* Prevent bullet points from splitting across columns */
+			ul.two-column li { break-inside: avoid-column; page-break-inside: avoid; }
+			
+			/* Format education in left column */
+			.left-column .education-container { text-align: left; }
+			.left-column .education-container .pull-left, .left-column .education-container .pull-right { float: none !important; display: block; text-align: left; }
+			.left-column .education-container h5.italic.pull-right { margin-top: 3px; margin-bottom: 6px; color: #777; }
+			.left-column .education-container ul.two-column { column-count: 1 !important; -webkit-column-count: 1 !important; padding-left: 15px; margin-top: 10px; list-style-type: disc; }
+			.left-column .education-container ul.two-column li { text-align: left; }
+			`
+					: ''
+			}
+			
+			/* Inject visual page breaks for screen preview (US Letter: 8.5x11 in) */
+			@media screen {
+				html, body { margin: 0; padding: 0; background: white; }
+				body::after {
+					content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+					pointer-events: none;
+					background-image: linear-gradient(to bottom, transparent calc(11in - 1px), red calc(11in - 1px), red 11in);
+					background-size: 100% 11in; opacity: 0.3; z-index: 9999;
+				}
+			}
+			@media print {
+				@page { margin: 0; }
+				body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+			}
+		\x3C/style\x3E
+		${previewHtml}
+		${
+			selectedTheme === 'macchiato'
+				? `
+		\x3Cscript\x3E
+			// Move education to left sidebar
+			const ed = document.querySelector('.education-container');
+			const leftCol = document.querySelector('.left-column');
+			if (ed && leftCol) {
+				leftCol.appendChild(ed);
+			}
+		\x3C/script\x3E
+		`
+				: ''
+		}
+	`);
+
 	let isTailoring = $state(false);
 	let isSaving = $state(false);
-	
+
 	let toastMessage = $state('');
-	
-	const SECTIONS = ['basics', 'work', 'education', 'skills', 'projects', 'awards', 'publications', 'languages', 'interests', 'references'];
+
+	const SECTIONS = [
+		'basics',
+		'work',
+		'education',
+		'skills',
+		'projects',
+		'awards',
+		'publications',
+		'languages',
+		'interests',
+		'references'
+	];
 	const THEMES = ['macchiato', 'elegant', 'flat'];
 	const FONTS = ['Outfit', 'Inter', 'Roboto', 'Merriweather', 'Playfair Display'];
 
 	function showToast(msg: string) {
 		toastMessage = msg;
-		setTimeout(() => { toastMessage = ''; }, 3000);
+		setTimeout(() => {
+			toastMessage = '';
+		}, 3000);
 	}
 
 	onMount(async () => {
@@ -67,7 +137,9 @@
 					coverLetterPrompt = setJson.data.coverLetterPrompt || '';
 				}
 			}
-		} catch(e) { console.error('Failed to load settings', e); }
+		} catch (e) {
+			console.error('Failed to load settings', e);
+		}
 
 		// Load Master Data
 		try {
@@ -80,7 +152,9 @@
 				}
 				editorContent = JSON.stringify(masterData[activeSection], null, 2);
 			}
-		} catch(e) { console.error('Failed to load master data', e); }
+		} catch (e) {
+			console.error('Failed to load master data', e);
+		}
 
 		// Load Drafts
 		await fetchDrafts();
@@ -116,7 +190,9 @@
 					})
 				});
 				showToast('Settings saved');
-			} catch (e) { console.error('Failed to save settings', e); }
+			} catch (e) {
+				console.error('Failed to save settings', e);
+			}
 		}, 1500);
 	}
 
@@ -154,7 +230,7 @@
 	function handleEditorChange(e: Event) {
 		const target = e.target as HTMLTextAreaElement;
 		editorContent = target.value;
-		
+
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(async () => {
 			try {
@@ -178,7 +254,7 @@
 					await renderPreview(parsed, selectedTheme);
 					showToast('Saved Draft');
 				}
-				
+
 				isSaving = false;
 			} catch (err) {
 				// Invalid JSON, don't save yet
@@ -197,7 +273,7 @@
 			const res = await fetch('/api/generate-master', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ 
+				body: JSON.stringify({
 					resumeText: rawResumeText,
 					provider: aiProvider,
 					modelName: aiModelName,
@@ -228,7 +304,7 @@
 			alert('Please enter a job description first.');
 			return;
 		}
-		
+
 		isTailoring = true;
 		try {
 			const res = await fetch('/api/tailor', {
@@ -242,7 +318,7 @@
 					customPrompt: tailorPrompt
 				})
 			});
-			
+
 			if (res.ok) {
 				const result = await res.json();
 				await renderPreview(result.resume, selectedTheme);
@@ -268,7 +344,7 @@
 			alert('Please enter a job description first.');
 			return;
 		}
-		
+
 		isTailoring = true;
 		try {
 			const res = await fetch('/api/coverletter', {
@@ -282,7 +358,7 @@
 					customPrompt: coverLetterPrompt
 				})
 			});
-			
+
 			if (res.ok) {
 				const result = await res.json();
 				// Wrap cover letter in a simple div for styling
@@ -312,7 +388,7 @@
 				previewHtml = json.html;
 			}
 		} catch (e) {
-			console.error("Render failed", e);
+			console.error('Render failed', e);
 		}
 	}
 
@@ -327,7 +403,7 @@
 		currentResizer = resizer;
 		startX = e.clientX;
 		startWidth = resizer === 'left' ? leftColWidth : midColWidth;
-		
+
 		window.addEventListener('mousemove', onDrag);
 		window.addEventListener('mouseup', stopDrag);
 		document.body.style.cursor = 'col-resize';
@@ -362,321 +438,295 @@
 			window.print();
 		}
 	}
-	
+
 	// React to theme/font changes if we already have a preview
 	// We'll skip complex reactive rerendering for this snippet, but user can re-click a button.
 </script>
 
-<div class="dashboard">
-	{#if toastMessage}
-		<div class="toast animate-slideIn">{toastMessage}</div>
-	{/if}
+<div class="container-fluid p-0 dashboard overflow-hidden h-100">
+	<div
+		class="row g-0 h-100 flex-column flex-md-row flex-nowrap flex-md-wrap"
+		style="overflow-y: auto; overflow-x: hidden;"
+	>
+		{#if toastMessage}
+			<div class="toast animate-slideIn">{toastMessage}</div>
+		{/if}
 
-	<!-- Left Column: Context & Files -->
-	<div class="column left-col" style="width: {leftColWidth}px;">
-		<div class="left-col-content">
-			
-			<!-- AI Configurator Accordion -->
-			<div class="accordion-item" class:open={openPanels.config}>
-				<button class="accordion-header" onclick={() => togglePanel('config')}>
-					<h3>AI Configurator</h3>
-					<span class="chevron">▼</span>
-				</button>
-				<div class="accordion-content">
-					<div class="config-group">
-						<select bind:value={aiProvider} onchange={triggerSettingsSave} class="ui-select full-width mb-1">
-							<option value="openai">OpenAI</option>
-							<option value="gemini">Gemini</option>
-							<option value="openrouter">OpenRouter</option>
-							<option value="opencode">OpenCode</option>
-						</select>
-						<input 
-							type="text" 
-							class="job-input sm-input" 
-							bind:value={aiModelName} 
+		<!-- Left Column: Context & Files -->
+		<div
+			class="col-12 d-flex flex-column left-col border-end border-secondary"
+			style="--desktop-width: {leftColWidth}px; height: 100vh;"
+		>
+			<div class="left-col-content">
+				<!-- AI Configurator Accordion -->
+				<div class="accordion-item" class:open={openPanels.config}>
+					<button class="accordion-header" onclick={() => togglePanel('config')}>
+						<h3>AI Configurator</h3>
+						<span class="chevron">▼</span>
+					</button>
+					<div class="accordion-content">
+						<div class="config-group">
+							<select
+								bind:value={aiProvider}
+								onchange={triggerSettingsSave}
+								class="form-select bg-dark text-light border-secondary full-width mb-1"
+							>
+								<option value="openai">OpenAI</option>
+								<option value="gemini">Gemini</option>
+								<option value="openrouter">OpenRouter</option>
+								<option value="opencode">OpenCode</option>
+							</select>
+							<input
+								type="text"
+								class="form-control bg-dark text-light border-secondary sm-input"
+								bind:value={aiModelName}
+								oninput={triggerSettingsSave}
+								placeholder="Custom model name (optional)"
+							/>
+						</div>
+					</div>
+				</div>
+
+				<!-- System Prompts Accordion -->
+				<div class="accordion-item" class:open={openPanels.prompts}>
+					<button class="accordion-header" onclick={() => togglePanel('prompts')}>
+						<h3>System Prompts</h3>
+						<span class="chevron">▼</span>
+					</button>
+					<div class="accordion-content">
+						<label class="prompt-label">Tailor Resume Prompt</label>
+						<textarea
+							class="form-control bg-dark text-light border-secondary prompt-input"
+							bind:value={tailorPrompt}
 							oninput={triggerSettingsSave}
-							placeholder="Custom model name (optional)" 
-						/>
+							spellcheck="false"></textarea>
+
+						<label class="prompt-label mt-2">Cover Letter Prompt</label>
+						<textarea
+							class="form-control bg-dark text-light border-secondary prompt-input"
+							bind:value={coverLetterPrompt}
+							oninput={triggerSettingsSave}
+							spellcheck="false"></textarea>
+
+						<label class="prompt-label mt-2">Generate Source of Truth Prompt</label>
+						<textarea
+							class="form-control bg-dark text-light border-secondary prompt-input"
+							bind:value={masterPrompt}
+							oninput={triggerSettingsSave}
+							spellcheck="false"></textarea>
+					</div>
+				</div>
+
+				<!-- Import Existing Resume Accordion -->
+				<div class="accordion-item" class:open={openPanels.import}>
+					<button class="accordion-header" onclick={() => togglePanel('import')}>
+						<h3>Import Existing Resume</h3>
+						<span class="chevron">▼</span>
+					</button>
+					<div class="accordion-content">
+						<textarea
+							class="form-control bg-dark text-light border-secondary"
+							bind:value={rawResumeText}
+							placeholder="Paste your existing resume here to generate source of truth..."
+						></textarea>
+						<button
+							class="btn-primary full-width mt-2"
+							onclick={generateMasterData}
+							disabled={isGeneratingMaster}
+						>
+							{#if isGeneratingMaster}
+								<Loader2 size={16} class="spinner" /> Generating...
+							{:else}
+								Generate Source of Truth
+							{/if}
+						</button>
+					</div>
+				</div>
+
+				<!-- Target Job Description Accordion -->
+				<div class="accordion-item" class:open={openPanels.job}>
+					<button class="accordion-header" onclick={() => togglePanel('job')}>
+						<h3>Target Job Description</h3>
+						<span class="chevron">▼</span>
+					</button>
+					<div class="accordion-content">
+						<textarea
+							class="form-control bg-dark text-light border-secondary"
+							bind:value={jobDescription}
+							placeholder="Paste job listing here..."></textarea>
+					</div>
+				</div>
+
+				<!-- Master Data Vault Accordion -->
+				<div class="accordion-item" class:open={openPanels.vault}>
+					<button class="accordion-header" onclick={() => togglePanel('vault')}>
+						<h3>Master Data Vault</h3>
+						<span class="chevron">▼</span>
+					</button>
+					<div class="accordion-content">
+						<ul class="file-list">
+							{#each SECTIONS as section}
+								<li>
+									<button
+										class="file-btn"
+										class:active={activeSection === section}
+										onclick={() => selectSection(section)}
+									>
+										<FileJson size={16} />
+										<span>{section}.json</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
 					</div>
 				</div>
 			</div>
-
-			<!-- System Prompts Accordion -->
-			<div class="accordion-item" class:open={openPanels.prompts}>
-				<button class="accordion-header" onclick={() => togglePanel('prompts')}>
-					<h3>System Prompts</h3>
-					<span class="chevron">▼</span>
-				</button>
-				<div class="accordion-content">
-					<label class="prompt-label">Tailor Resume Prompt</label>
-					<textarea 
-						class="job-input prompt-input" 
-						bind:value={tailorPrompt} 
-						oninput={triggerSettingsSave}
-						spellcheck="false"
-					></textarea>
-
-					<label class="prompt-label mt-2">Cover Letter Prompt</label>
-					<textarea 
-						class="job-input prompt-input" 
-						bind:value={coverLetterPrompt} 
-						oninput={triggerSettingsSave}
-						spellcheck="false"
-					></textarea>
-					
-					<label class="prompt-label mt-2">Generate Source of Truth Prompt</label>
-					<textarea 
-						class="job-input prompt-input" 
-						bind:value={masterPrompt} 
-						oninput={triggerSettingsSave}
-						spellcheck="false"
-					></textarea>
-				</div>
-			</div>
-
-			<!-- Import Existing Resume Accordion -->
-			<div class="accordion-item" class:open={openPanels.import}>
-				<button class="accordion-header" onclick={() => togglePanel('import')}>
-					<h3>Import Existing Resume</h3>
-					<span class="chevron">▼</span>
-				</button>
-				<div class="accordion-content">
-					<textarea 
-						class="job-input" 
-						bind:value={rawResumeText} 
-						placeholder="Paste your existing resume here to generate source of truth..."
-					></textarea>
-					<button class="btn-primary full-width mt-2" onclick={generateMasterData} disabled={isGeneratingMaster}>
-						{#if isGeneratingMaster}
-							<Loader2 size={16} class="spinner" /> Generating...
-						{:else}
-							Generate Source of Truth
-						{/if}
-					</button>
-				</div>
-			</div>
-
-			<!-- Target Job Description Accordion -->
-			<div class="accordion-item" class:open={openPanels.job}>
-				<button class="accordion-header" onclick={() => togglePanel('job')}>
-					<h3>Target Job Description</h3>
-					<span class="chevron">▼</span>
-				</button>
-				<div class="accordion-content">
-					<textarea 
-						class="job-input" 
-						bind:value={jobDescription} 
-						placeholder="Paste job listing here..."
-					></textarea>
-				</div>
-			</div>
-
-			<!-- Master Data Vault Accordion -->
-			<div class="accordion-item" class:open={openPanels.vault}>
-				<button class="accordion-header" onclick={() => togglePanel('vault')}>
-					<h3>Master Data Vault</h3>
-					<span class="chevron">▼</span>
-				</button>
-				<div class="accordion-content">
-					<ul class="file-list">
-						{#each SECTIONS as section}
-							<li>
-								<button 
-									class="file-btn" 
-									class:active={activeSection === section}
-									onclick={() => selectSection(section)}
-								>
-									<FileJson size={16} />
-									<span>{section}.json</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			</div>
-
 		</div>
-	</div>
 
-	<!-- Resizer 1 -->
-	<div class="resizer" onmousedown={(e) => startDrag(e, 'left')} role="separator" tabindex="0"></div>
+		<!-- Resizer 1 -->
+		<div
+			class="resizer d-none d-md-block"
+			onmousedown={(e) => startDrag(e, 'left')}
+			role="separator"
+			tabindex="0"
+			aria-label="Resize left column"
+		></div>
 
-	<!-- Middle Column: Editor -->
-	<div class="column mid-col" style="width: {midColWidth}px;">
-		<div class="mid-col-content">
-			<div class="editor-header">
-			<div class="editor-title">
-				<FileText size={20} class="accent-icon" />
-				<h2>
-					{#if editorMode === 'master'}
-						Editing: {activeSection}.json
-					{:else}
-						Editing: Tailored Draft
+		<!-- Middle Column: Editor -->
+		<div
+			class="col-12 d-flex flex-column mid-col border-end border-secondary"
+			style="--desktop-width: {midColWidth}px; height: 100vh;"
+		>
+			<div class="mid-col-content">
+				<div class="editor-header">
+					<div class="editor-title">
+						<FileText size={20} class="accent-icon" />
+						<h2>
+							{#if editorMode === 'master'}
+								Editing: {activeSection}.json
+							{:else}
+								Editing: Tailored Draft
+							{/if}
+						</h2>
+					</div>
+					<div class="save-status">
+						{#if isSaving}
+							<Loader2 size={16} class="spinner" /> <span>Saving...</span>
+						{:else}
+							<Save size={16} /> <span>Saved</span>
+						{/if}
+					</div>
+				</div>
+				<textarea
+					class="form-control bg-dark text-light border-secondary json-editor"
+					value={editorContent}
+					oninput={handleEditorChange}
+					spellcheck="false"></textarea>
+			</div>
+		</div>
+
+		<!-- Resizer 2 -->
+		<div
+			class="resizer d-none d-md-block"
+			onmousedown={(e) => startDrag(e, 'mid')}
+			role="separator"
+			tabindex="0"
+			aria-label="Resize middle column"
+		></div>
+
+		<!-- Right Column: Preview -->
+		<div
+			class="col-12 d-flex flex-column right-col printable-area"
+			style="height: 100vh; overflow-y: auto;"
+		>
+			<div class="preview-toolbar no-print">
+				<div class="toolbar-group mode-toggle-group">
+					<button
+						class="toggle-btn"
+						class:active={generationMode === 'resume'}
+						onclick={() => (generationMode = 'resume')}>Resume</button
+					>
+					<button
+						class="toggle-btn"
+						class:active={generationMode === 'coverletter'}
+						onclick={() => (generationMode = 'coverletter')}>Cover Letter</button
+					>
+				</div>
+
+				<div class="toolbar-group">
+					{#if generationMode === 'resume'}
+						<select
+							bind:value={selectedDraftId}
+							onchange={handleDraftSelect}
+							class="form-select bg-dark text-light border-secondary sm-select"
+						>
+							<option value="">-- Select a Draft --</option>
+							{#each draftsList as draft}
+								<option value={draft._id}>{draft.companyName}</option>
+							{/each}
+						</select>
+
+						<select
+							bind:value={selectedTheme}
+							class="form-select bg-dark text-light border-secondary sm-select"
+						>
+							{#each THEMES as theme}
+								<option value={theme}>{theme} theme</option>
+							{/each}
+						</select>
 					{/if}
-				</h2>
-			</div>
-			<div class="save-status">
-				{#if isSaving}
-					<Loader2 size={16} class="spinner" /> <span>Saving...</span>
-				{:else}
-					<Save size={16} /> <span>Saved</span>
-				{/if}
-			</div>
-		</div>
-			<textarea 
-				class="json-editor" 
-				value={editorContent}
-				oninput={handleEditorChange}
-				spellcheck="false"
-			></textarea>
-		</div>
-	</div>
 
-	<!-- Resizer 2 -->
-	<div class="resizer" onmousedown={(e) => startDrag(e, 'mid')} role="separator" tabindex="0"></div>
-
-	<!-- Right Column: Preview -->
-	<div class="column right-col printable-area">
-		<div class="preview-toolbar no-print">
-			<div class="toolbar-group mode-toggle-group">
-				<button 
-					class="toggle-btn" 
-					class:active={generationMode === 'resume'} 
-					onclick={() => generationMode = 'resume'}
-				>Resume</button>
-				<button 
-					class="toggle-btn" 
-					class:active={generationMode === 'coverletter'} 
-					onclick={() => generationMode = 'coverletter'}
-				>Cover Letter</button>
-			</div>
-
-			<div class="toolbar-group">
-				{#if generationMode === 'resume'}
-					<select bind:value={selectedDraftId} onchange={handleDraftSelect} class="ui-select sm-select">
-						<option value="">-- Select a Draft --</option>
-						{#each draftsList as draft}
-							<option value={draft._id}>{draft.companyName}</option>
+					<select
+						bind:value={selectedFont}
+						class="form-select bg-dark text-light border-secondary sm-select"
+					>
+						{#each FONTS as font}
+							<option value={font}>{font}</option>
 						{/each}
 					</select>
+				</div>
 
-					<select bind:value={selectedTheme} class="ui-select sm-select">
-						{#each THEMES as theme}
-							<option value={theme}>{theme} theme</option>
-						{/each}
-					</select>
-				{/if}
-				
-				<select bind:value={selectedFont} class="ui-select sm-select">
-					{#each FONTS as font}
-						<option value={font}>{font}</option>
-					{/each}
-				</select>
+				<div class="toolbar-group">
+					{#if generationMode === 'resume'}
+						<button class="btn-primary" onclick={tailorResume} disabled={isTailoring}>
+							{#if isTailoring}
+								<Loader2 size={16} class="spinner" /> Tailoring...
+							{:else}
+								Tailor Resume
+							{/if}
+						</button>
+					{:else}
+						<button class="btn-primary" onclick={generateCoverLetter} disabled={isTailoring}>
+							{#if isTailoring}
+								<Loader2 size={16} class="spinner" /> Generating...
+							{:else}
+								Generate Letter
+							{/if}
+						</button>
+					{/if}
+					<button class="btn-icon" title="Save as PDF" onclick={generatePdf}>
+						<Download size={18} />
+					</button>
+				</div>
 			</div>
 
-			<div class="toolbar-group">
-				{#if generationMode === 'resume'}
-					<button class="btn-primary" onclick={tailorResume} disabled={isTailoring}>
-						{#if isTailoring}
-							<Loader2 size={16} class="spinner" /> Tailoring...
-						{:else}
-							Tailor Resume
-						{/if}
-					</button>
+			<div class="preview-container">
+				{#if previewHtml}
+					<div class="resume-wrapper">
+						<iframe
+							title="Resume Preview"
+							class="resume-iframe"
+							srcdoc={iframeSrcdoc}
+							frameborder="0"
+						></iframe>
+					</div>
 				{:else}
-					<button class="btn-primary" onclick={generateCoverLetter} disabled={isTailoring}>
-						{#if isTailoring}
-							<Loader2 size={16} class="spinner" /> Generating...
-						{:else}
-							Generate Letter
-						{/if}
-					</button>
+					<div class="empty-preview">
+						<div class="placeholder-icon animate-pulse"></div>
+						<p>Generate a tailored resume to see the preview.</p>
+					</div>
 				{/if}
-				<button class="btn-icon" title="Save as PDF" onclick={generatePdf}>
-					<Download size={18} />
-				</button>
 			</div>
-		</div>
-
-		<div class="preview-container">
-			{#if previewHtml}
-				<div class="resume-wrapper">
-					<iframe 
-						title="Resume Preview"
-						class="resume-iframe"
-						srcdoc={`
-							<style>
-								/* Inject font override */
-								body { font-family: '${selectedFont}', sans-serif !important; }
-								
-								${selectedTheme === 'macchiato' ? `
-								/* Expand left sidebar in macchiato theme */
-								.left-column { width: 220px !important; margin-right: 25px !important; }
-								.info-tag-container .info-text { width: auto !important; }
-								/* Prevent bullet points from splitting across columns */
-								ul.two-column li { break-inside: avoid-column; page-break-inside: avoid; }
-								
-								/* Format education in left column */
-								.left-column .education-container { text-align: left; }
-								.left-column .education-container .pull-left, .left-column .education-container .pull-right { float: none !important; display: block; text-align: left; }
-								.left-column .education-container h5.italic.pull-right { margin-top: 3px; margin-bottom: 6px; color: #777; }
-								.left-column .education-container ul.two-column { column-count: 1 !important; -webkit-column-count: 1 !important; padding-left: 15px; margin-top: 10px; list-style-type: disc; }
-								.left-column .education-container ul.two-column li { text-align: left; }
-								` : ''}
-								
-								/* Inject visual page breaks for screen preview (US Letter: 8.5x11 in) */
-								@media screen {
-									html, body { 
-										margin: 0; 
-										padding: 0; 
-										background: white;
-									}
-									/* This draws a subtle red dashed line every 11 inches to indicate page breaks */
-									body::after {
-										content: "";
-										position: absolute;
-										top: 0;
-										left: 0;
-										right: 0;
-										bottom: 0;
-										pointer-events: none;
-										background-image: linear-gradient(to bottom, transparent calc(11in - 1px), red calc(11in - 1px), red 11in);
-										background-size: 100% 11in;
-										opacity: 0.3;
-										z-index: 9999;
-									}
-								}
-								@media print {
-									@page {
-										margin: 0;
-									}
-									body {
-										-webkit-print-color-adjust: exact;
-										print-color-adjust: exact;
-									}
-								}
-							</style>
-							${previewHtml}
-							${selectedTheme === 'macchiato' ? `
-							<script>
-								// Move education to left sidebar
-								const ed = document.querySelector('.education-container');
-								const leftCol = document.querySelector('.left-column');
-								if (ed && leftCol) {
-									leftCol.appendChild(ed);
-								}
-							</script>
-							` : ''}
-						`}
-						frameborder="0"
-					></iframe>
-				</div>
-			{:else}
-				<div class="empty-preview">
-					<div class="placeholder-icon animate-pulse"></div>
-					<p>Generate a tailored resume to see the preview.</p>
-				</div>
-			{/if}
 		</div>
 	</div>
 </div>
@@ -689,22 +739,8 @@
 		background: var(--bg-primary);
 	}
 
-	.column {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		flex-shrink: 0;
-	}
-	
-	.resizer {
-		width: 6px;
-		background-color: var(--border-color);
-		cursor: col-resize;
-		transition: background-color 0.2s;
-		z-index: 10;
-	}
-	
-	.resizer:hover, .resizer:active {
+	.resizer:hover,
+	.resizer:active {
 		background-color: var(--accent-solid);
 	}
 
@@ -712,7 +748,7 @@
 	.left-col {
 		background: var(--bg-secondary);
 	}
-	
+
 	/* Wrap the contents of resizable columns so we can scroll inside them */
 	.left-col-content {
 		padding: 1rem;
@@ -740,8 +776,10 @@
 		background: var(--bg-tertiary);
 		transition: background 0.2s;
 	}
-	.accordion-header:hover { background: var(--border-color); }
-	
+	.accordion-header:hover {
+		background: var(--border-color);
+	}
+
 	.accordion-header h3 {
 		font-size: 0.85rem;
 		text-transform: uppercase;
@@ -749,29 +787,41 @@
 		color: var(--text-secondary);
 		margin: 0;
 	}
-	
+
 	.chevron {
 		font-size: 0.75rem;
 		color: var(--text-secondary);
 		transition: transform 0.3s ease;
 		transform: rotate(-90deg);
 	}
-	
-	.accordion-item.open .chevron { transform: rotate(0deg); }
-	
+
+	.accordion-item.open .chevron {
+		transform: rotate(0deg);
+	}
+
 	.accordion-content {
 		display: none;
 		padding: 0 1rem 1rem 1rem;
 	}
-	
+
 	.accordion-item.open .accordion-content {
 		display: block;
 	}
 
-	.config-group { display: flex; flex-direction: column; gap: 0.5rem; }
-	.mb-1 { margin-bottom: 0.25rem; }
-	.sm-input { height: auto; padding: 0.35rem 0.75rem; font-size: 0.85rem; }
-	
+	.config-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.mb-1 {
+		margin-bottom: 0.25rem;
+	}
+	.sm-input {
+		height: auto;
+		padding: 0.35rem 0.75rem;
+		font-size: 0.85rem;
+	}
+
 	.prompt-label {
 		display: block;
 		font-size: 0.8rem;
@@ -794,7 +844,10 @@
 		resize: none;
 		font-size: 0.9rem;
 	}
-	.job-input:focus { border-color: var(--accent-solid); outline: none; }
+	.job-input:focus {
+		border-color: var(--accent-solid);
+		outline: none;
+	}
 
 	.file-list {
 		list-style: none;
@@ -813,7 +866,10 @@
 		color: var(--text-secondary);
 		transition: all 0.2s;
 	}
-	.file-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+	.file-btn:hover {
+		background: var(--bg-tertiary);
+		color: var(--text-primary);
+	}
 	.file-btn.active {
 		background: rgba(139, 92, 246, 0.1);
 		color: var(--accent-solid);
@@ -824,7 +880,7 @@
 	.mid-col {
 		background: var(--bg-primary);
 	}
-	
+
 	.mid-col-content {
 		display: flex;
 		flex-direction: column;
@@ -846,8 +902,12 @@
 		align-items: center;
 		gap: 0.75rem;
 	}
-	.editor-title h2 { font-size: 1.1rem; }
-	.accent-icon { color: var(--accent-solid); }
+	.editor-title h2 {
+		font-size: 1.1rem;
+	}
+	.accent-icon {
+		color: var(--accent-solid);
+	}
 
 	.save-status {
 		display: flex;
@@ -878,6 +938,24 @@
 		position: relative;
 	}
 
+	@media (min-width: 768px) {
+		.left-col {
+			width: var(--desktop-width, 320px);
+			flex: 0 0 auto;
+			max-width: none;
+		}
+		.mid-col {
+			width: var(--desktop-width, 400px);
+			flex: 0 0 auto;
+			max-width: none;
+		}
+		.right-col {
+			flex: 1 1 0%;
+			max-width: none;
+			width: auto;
+		}
+	}
+
 	.preview-toolbar {
 		display: flex;
 		align-items: center;
@@ -888,7 +966,11 @@
 		z-index: 10;
 	}
 
-	.toolbar-group { display: flex; gap: 0.75rem; align-items: center; }
+	.toolbar-group {
+		display: flex;
+		gap: 0.75rem;
+		align-items: center;
+	}
 
 	.ui-select {
 		background: var(--bg-primary);
@@ -899,8 +981,11 @@
 		color: var(--text-primary);
 		outline: none;
 	}
-	
-	.sm-select { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
+
+	.sm-select {
+		padding: 0.35rem 0.75rem;
+		font-size: 0.85rem;
+	}
 
 	.mode-toggle-group {
 		background: var(--bg-primary);
@@ -929,7 +1014,7 @@
 	.toggle-btn.active {
 		background: var(--bg-tertiary);
 		color: var(--text-primary);
-		box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
 
 	.btn-primary {
@@ -943,11 +1028,22 @@
 		color: white;
 		transition: all 0.2s;
 	}
-	.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(139,92,246,0.3); }
-	.btn-primary:disabled { opacity: 0.7; cursor: wait; }
+	.btn-primary:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+	}
+	.btn-primary:disabled {
+		opacity: 0.7;
+		cursor: wait;
+	}
 
-	.full-width { width: 100%; justify-content: center; }
-	.mt-2 { margin-top: 0.75rem; }
+	.full-width {
+		width: 100%;
+		justify-content: center;
+	}
+	.mt-2 {
+		margin-top: 0.75rem;
+	}
 
 	.btn-icon {
 		display: flex;
@@ -960,7 +1056,10 @@
 		border: 1px solid var(--border-color);
 		transition: all 0.2s;
 	}
-	.btn-icon:hover { border-color: var(--accent-solid); color: var(--accent-solid); }
+	.btn-icon:hover {
+		border-color: var(--accent-solid);
+		color: var(--accent-solid);
+	}
 
 	.preview-container {
 		flex: 1;
@@ -974,12 +1073,12 @@
 		width: 100%;
 		max-width: 8.5in; /* US Letter width */
 		background: white;
-		box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 		border-radius: 4px;
 		display: flex;
 		flex-direction: column;
 		/* Ensure it matches aspect ratio of pages */
-		min-height: 11in; 
+		min-height: 11in;
 	}
 
 	.resume-iframe {
@@ -997,7 +1096,8 @@
 		color: var(--text-secondary);
 	}
 	.placeholder-icon {
-		width: 64px; height: 64px;
+		width: 64px;
+		height: 64px;
 		border-radius: 50%;
 		background: var(--bg-tertiary);
 		margin: 0 auto 1.5rem;
@@ -1012,23 +1112,69 @@
 		padding: 1rem 2rem;
 		border-radius: var(--radius);
 		font-weight: 500;
-		box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
 		z-index: 50;
 	}
 
-	.spinner { animation: spin 1s linear infinite; }
-	@keyframes spin { 100% { transform: rotate(360deg); } }
+	.spinner {
+		animation: spin 1s linear infinite;
+	}
+	@keyframes spin {
+		100% {
+			transform: rotate(360deg);
+		}
+	}
 
 	/* Print Styles */
 	@media print {
-		body { background: white; }
-		.no-print { display: none !important; }
-		.left-col, .mid-col { display: none !important; }
-		.dashboard { display: block; height: auto; overflow: visible; }
-		.right-col { width: 100%; border: none; padding: 0; background: white; }
-		.preview-container { padding: 0; overflow: visible; display: block; }
-		.resume-wrapper { max-width: 100%; box-shadow: none; border-radius: 0; }
-		.resume-iframe { min-height: 100vh; height: auto; }
-		@page { size: portrait; margin: 0; }
+		body {
+			background: white;
+		}
+		.no-print {
+			display: none !important;
+		}
+		.left-col,
+		.mid-col {
+			display: none !important;
+		}
+		.dashboard {
+			display: block;
+			height: auto;
+			overflow: visible;
+		}
+		.right-col {
+			width: 100%;
+			border: none;
+			padding: 0;
+			background: white;
+		}
+		.preview-container {
+			padding: 0;
+			overflow: visible;
+			display: block;
+		}
+		.resume-wrapper {
+			max-width: 100%;
+			box-shadow: none;
+			border-radius: 0;
+		}
+		.resume-iframe {
+			min-height: 100vh;
+			height: auto;
+		}
+		@page {
+			size: portrait;
+			margin: 0;
+		}
+	}
+
+	.resizer {
+		width: 6px;
+		height: 100vh;
+		background-color: var(--border-color);
+		cursor: col-resize;
+		transition: background-color 0.2s;
+		z-index: 10;
+		flex-shrink: 0;
 	}
 </style>
